@@ -24,10 +24,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import herddb.model.StatementExecutionException;
 import org.junit.Rule;
@@ -59,8 +56,8 @@ public class SystemTablesTest {
             try (HDBClient client = new HDBClient(new ClientConfiguration(folder.newFolder().toPath()));) {
                 client.setClientSideMetadataProvider(new StaticClientSideMetadataProvider(server));
                 try (BasicHerdDBDataSource dataSource = new BasicHerdDBDataSource(client);
-                        Connection con = dataSource.getConnection();
-                        Statement statement = con.createStatement();) {
+                     Connection con = dataSource.getConnection();
+                     Statement statement = con.createStatement();) {
                     statement.execute("CREATE TABLE mytable (key string primary key, name string)");
                     statement.execute("CREATE INDEX mytableindex ON mytable(name)");
                     statement.execute("CREATE TABLE mytable2 (n2 int primary key auto_increment, name string, ts timestamp)");
@@ -234,11 +231,11 @@ public class SystemTablesTest {
             try (HDBClient client = new HDBClient(new ClientConfiguration(folder.newFolder().toPath()));) {
                 client.setClientSideMetadataProvider(new StaticClientSideMetadataProvider(server));
                 try {
-                     BasicHerdDBDataSource dataSource = new BasicHerdDBDataSource(client);
-                     Connection con = dataSource.getConnection();
-                     Statement statement = con.createStatement();
-                     statement.execute("CREATE TABLE mytable (key string primary key, name string,d1 double not null)");
-                } catch(SQLException ex) {
+                    BasicHerdDBDataSource dataSource = new BasicHerdDBDataSource(client);
+                    Connection con = dataSource.getConnection();
+                    Statement statement = con.createStatement();
+                    statement.execute("CREATE TABLE mytable (key string primary key, name string,d1 double not null)");
+                } catch (SQLException ex) {
                     assertTrue(ex.getMessage().contains("StatementExecutionException"));
                     assertTrue(ex.getMessage().contains("Not null constraints not supported for column type 6"));
                 }
@@ -264,9 +261,55 @@ public class SystemTablesTest {
                         insertPs.addBatch();
                     }
                     insertPs.executeBatch();
-                } catch(SQLException ex) {
+                } catch (SQLException ex) {
                     assertTrue(ex.getMessage().contains("StatementExecutionException"));
                     assertTrue(ex.getMessage().contains("Cannot have null value in non null type string not null"));
+                }
+            }
+        }
+    }
+
+    @Test
+    public void ensureMetaDataWorksForNotNullConstraints() throws Exception {
+        try (Server server = new Server(new ServerConfiguration(folder.newFolder().toPath()))) {
+            server.start();
+            server.waitForStandaloneBoot();
+            try (HDBClient client = new HDBClient(new ClientConfiguration(folder.newFolder().toPath()));) {
+                client.setClientSideMetadataProvider(new StaticClientSideMetadataProvider(server));
+                try (BasicHerdDBDataSource dataSource = new BasicHerdDBDataSource(client);
+                     Connection con = dataSource.getConnection();
+                     Statement statement = con.createStatement();) {
+                     statement.execute("CREATE TABLE mytable (key string primary key, name string)");
+                     statement.execute("CREATE TABLE mytable2 (n2 int primary key auto_increment, name string not null, ts timestamp)");
+                     DatabaseMetaData metaData = con.getMetaData();
+                     try(ResultSet rs = metaData.getColumns(null, null, "mytable", null);) {
+                         Map<String, Map<String, String>> records = new HashMap<>();
+
+                         while (rs.next()) {
+                             Map<String, String> record = new HashMap<>();
+                             record.put("DATA_TYPE", rs.getString("DATA_TYPE"));
+                             record.put("IS_NULLABLE", rs.getString("IS_NULLABLE"));
+                             records.put(rs.getString("COLUMN_NAME"), record);
+                         }
+                         assertTrue(records.size() == 2);
+                         assertTrue(records.get("key").get("DATA_TYPE").equalsIgnoreCase("string") && records.get("key").get("IS_NULLABLE").equalsIgnoreCase("NO"));
+                         assertTrue(records.get("name").get("DATA_TYPE").equalsIgnoreCase("string") && records.get("name").get("IS_NULLABLE").equalsIgnoreCase("YES"));
+                     }
+
+                    try(ResultSet rs = metaData.getColumns(null, null, "mytable2", null);) {
+                        Map<String, Map<String, String>> records = new HashMap<>();
+
+                        while (rs.next()) {
+                            Map<String, String> record = new HashMap<>();
+                            record.put("DATA_TYPE", rs.getString("DATA_TYPE"));
+                            record.put("IS_NULLABLE", rs.getString("IS_NULLABLE"));
+                            records.put(rs.getString("COLUMN_NAME"), record);
+                        }
+                        assertTrue(records.size() == 3);
+                        assertTrue(records.get("n2").get("DATA_TYPE").equalsIgnoreCase("integer") && records.get("n2").get("IS_NULLABLE").equalsIgnoreCase("NO"));
+                        assertTrue(records.get("name").get("DATA_TYPE").equalsIgnoreCase("string not null") && records.get("name").get("IS_NULLABLE").equalsIgnoreCase("NO"));
+                        assertTrue(records.get("ts").get("DATA_TYPE").equalsIgnoreCase("timestamp") && records.get("ts").get("IS_NULLABLE").equalsIgnoreCase("YES"));
+                    }
                 }
             }
         }
