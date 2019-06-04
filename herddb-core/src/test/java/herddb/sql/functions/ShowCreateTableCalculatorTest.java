@@ -184,14 +184,30 @@ public class ShowCreateTableCalculatorTest {
                 .uuid("1234")
                 .column("k1", ColumnTypes.INTEGER, 0)
                 .column("s1", ColumnTypes.STRING, 1)
-                .primaryKey("k1")
+                .column("s2", ColumnTypes.NOTNULL_STRING, 2)
+                .primaryKey("k1", true)
+                .primaryKey("s2")
                 .tablespace("ts1")
                 .name("test3")
                 .build();
 
         tm = new MockTableManager(t, new ArrayList<>());
-        assertTrue(ShowCreateTableCalculator.calculate(false, "test3", "ts1", tm).equals("CREATE TABLE ts1.test3(k1 integer,s1 string,PRIMARY KEY(k1))"));
+        assertTrue(ShowCreateTableCalculator.calculate(false, "test3", "ts1", tm).equals("CREATE TABLE ts1.test3(k1 integer auto_increment,s1 string,s2 string not null,PRIMARY KEY(k1,s2))"));
 
+        t = Table.builder()
+                .uuid("1234")
+                .column("k1", ColumnTypes.INTEGER, 0)
+                .column("s1", ColumnTypes.NOTNULL_STRING, 1)
+                .column("l1", ColumnTypes.NOTNULL_LONG,2)
+                .column("i1", ColumnTypes.NOTNULL_INTEGER,3)
+                .primaryKey("k1", true)
+                .tablespace("ts1")
+                .name("test3")
+                .build();
 
+        tm = new MockTableManager(t, new ArrayList<>());
+        assertTrue(ShowCreateTableCalculator.calculate(false, "test3", "ts1", tm).equals("CREATE TABLE ts1.test3(k1 integer auto_increment,s1 string not null,l1 long not null,i1 integer not null,PRIMARY KEY(k1))"));
     }
+
+
 }
